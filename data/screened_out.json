@@ -1,0 +1,97 @@
+[
+ {
+  "symbol": "IREN",
+  "list": "AI",
+  "reason": "Revenue -24% y/y (mining wind-down ahead of AI cloud ramp)"
+ },
+ {
+  "symbol": "WULF",
+  "list": "AI",
+  "reason": "Revenue -6% y/y"
+ },
+ {
+  "symbol": "CIFR",
+  "list": "AI",
+  "reason": "Revenue -43% y/y"
+ },
+ {
+  "symbol": "VST",
+  "list": "AI",
+  "reason": "Revenue -5% y/y"
+ },
+ {
+  "symbol": "TLN",
+  "list": "AI",
+  "reason": "Revenue +19% y/y, only 24% off high"
+ },
+ {
+  "symbol": "KLAC",
+  "list": "AI",
+  "reason": "Revenue +15% y/y"
+ },
+ {
+  "symbol": "COIN",
+  "list": "All",
+  "reason": "Revenue -19% y/y"
+ },
+ {
+  "symbol": "FSLR",
+  "list": "All",
+  "reason": "Revenue -4% y/y"
+ },
+ {
+  "symbol": "TTD",
+  "list": "All",
+  "reason": "Revenue +3% y/y"
+ },
+ {
+  "symbol": "UBER",
+  "list": "All",
+  "reason": "Revenue +12% y/y"
+ },
+ {
+  "symbol": "NFLX",
+  "list": "All",
+  "reason": "Revenue +13% y/y"
+ },
+ {
+  "symbol": "INTU",
+  "list": "All",
+  "reason": "Revenue +14% y/y"
+ },
+ {
+  "symbol": "ADBE",
+  "list": "All",
+  "reason": "Revenue +13% y/y"
+ },
+ {
+  "symbol": "HUBS",
+  "list": "All",
+  "reason": "Revenue +20% y/y, borderline"
+ },
+ {
+  "symbol": "ZS",
+  "list": "All",
+  "reason": "Only 23% off high"
+ },
+ {
+  "symbol": "NOW",
+  "list": "All",
+  "reason": "Only 20% off high"
+ },
+ {
+  "symbol": "TEAM",
+  "list": "All",
+  "reason": "Only 5% off high"
+ },
+ {
+  "symbol": "DUOL",
+  "list": "All",
+  "reason": "Revenue +18% y/y"
+ },
+ {
+  "symbol": "OKLO",
+  "list": "AI",
+  "reason": "Pre-revenue"
+ }
+]

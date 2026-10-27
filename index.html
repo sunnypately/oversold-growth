@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oversold Growth Monitor</title>
+<meta name="description" content="High-growth stocks that have sold off, valued on fundamentals against live prices. All stocks and an AI focus list.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+:root {
+  --bg: #f8f8f6; --panel: #ffffff; --panel-2: #f0efec; --line: rgba(11,11,11,.10);
+  --fg: #141413; --muted: #6f6d67; --accent: #141413; --ok: #1a7f37; --bad: #d03b3b;
+  --s1: #2a78d6; --s2: #d95926; --crit: #d03b3b; --mutedbar: #c3c2b7; --grid: rgba(11,11,11,.08); --axis: #c3c2b7; --ref: #97958d;
+  --pop: #ffffff; --pop-line: rgba(11,11,11,.12); --sel: #f0efec;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --mono: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a19; --panel: #20201f; --panel-2: #2a2a28; --line: rgba(255,255,255,.10);
+    --fg: #f0efec; --muted: #97958d; --accent: #f0efec; --ok: #4cb84c; --bad: #e66767;
+    --s1: #3987e5; --s2: #eb6834; --crit: #e34948; --mutedbar: #5f5e5a; --grid: rgba(255,255,255,.08); --axis: #383835; --ref: #898781;
+    --pop: #2a2a28; --pop-line: rgba(255,255,255,.14); --sel: #2a2a28;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font-family: var(--mono); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+header h1 { font-family: var(--serif); font-weight: 400; font-size: 28px; margin: 0 0 6px; color: var(--fg); }
+header h1 span { color: inherit; }
+.take { color: var(--muted); max-width: 80ch; margin: 0; font-size: 13px; }
+.take b { color: var(--fg); font-weight: 700; }
+.status { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; color: var(--muted); font-size: 11px; }
+.status .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
+.status .dot.live { background: var(--ok); }
+.status .dot.err { background: var(--bad); }
+.btn { font: inherit; font-size: 11px; background: none; border: 1px solid var(--line); color: var(--fg); padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+.btn:hover { border-color: var(--fg); }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 24px 0 16px; border-bottom: 1px solid var(--line); }
+nav.tabs button { font: inherit; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 14px; cursor: pointer; letter-spacing: .02em; }
+nav.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); font-weight: 500; }
+.page[hidden] { display: none; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.tile .lbl { font-size: 12px; color: var(--muted); }
+.tile .num { font-family: var(--serif); font-size: 26px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.tile .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 12px; margin-bottom: 12px; }
+.card h2 { font-family: var(--serif); font-weight: 400; font-size: 17px; margin: 0 0 4px; }
+.card .note { font-size: 11px; color: var(--muted); margin: 0 0 12px; }
+.chart { position: relative; min-height: 300px; }
+.chart svg { display: block; }
+.chart text { font-family: var(--mono); }
+.tip { position: absolute; pointer-events: none; background: var(--pop); border: 1px solid var(--pop-line); border-radius: 6px; padding: 6px 8px; font-size: 12px; max-width: 260px; z-index: 5; box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+.tip .h { color: var(--muted); margin-bottom: 2px; }
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.tools input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); min-width: 220px; }
+.tools input:focus { outline: none; border-color: var(--fg); }
+.tools span { font-size: 11px; color: var(--muted); }
+.tablebox { max-height: 640px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: var(--panel); text-align: right; font-weight: 500; padding: 0; border-bottom: 1px solid var(--line); white-space: nowrap; z-index: 1; }
+th button { font: inherit; background: none; border: 0; color: var(--muted); padding: 8px; cursor: pointer; width: 100%; text-align: inherit; }
+th[aria-sort] button { color: var(--fg); }
+td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr.sel { background: var(--sel); box-shadow: inset 3px 0 0 var(--fg); }
+.sym { font-weight: 700; color: var(--fg); }
+.pos { color: var(--ok); } .neg { color: var(--bad); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); }
+.b-deep { color: var(--ok); border-color: currentColor; font-weight: 600; }
+.b-disc { color: var(--ok); }
+.b-fair { color: var(--muted); }
+.b-prem { color: var(--bad); }
+@media (max-width: 760px) { .hide-sm { display: none; } header h1 { font-size: 22px; } }
+.detail { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.detail h3 { font-family: var(--serif); font-weight: 400; font-size: 17px; margin: 0; color: var(--fg); }
+.detail p { line-height: 1.65; margin: 8px 0 0; max-width: 90ch; }
+.detail .mnote { color: var(--muted); }
+.detail dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px 16px; margin: 14px 0 0; }
+.detail dt { font-size: 11px; color: var(--muted); }
+.detail dd { margin: 2px 0 0; }
+.prose { line-height: 1.7; max-width: 80ch; }
+.prose h3 { font-family: var(--serif); font-weight: 400; font-size: 16px; color: var(--fg); margin: 20px 0 6px; }
+.prose p, .prose li { margin: 0 0 10px; }
+.prose b { color: var(--fg); }
+.fail { display: flex; align-items: center; justify-content: center; min-height: inherit; color: var(--muted); font-size: 11px; gap: 6px; }
+.fail::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); }
+footer { margin-top: 32px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Oversold <span>Growth</span> Monitor</h1>
+    <p class="take" id="take">Loading…</p>
+    <div class="status">
+      <span><span class="dot" id="qdot"></span><span id="qstat">Connecting to live quotes…</span></span>
+      <span id="fstat"></span>
+      <button class="btn" id="refresh">Refresh prices</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-page="all" aria-selected="true">All stocks</button>
+    <button role="tab" data-page="ai" aria-selected="false">AI focus</button>
+    <button role="tab" data-page="method" aria-selected="false">Method</button>
+  </nav>
+
+  <section class="page" id="all" data-list="All"></section>
+  <section class="page" id="ai" data-list="AI" hidden></section>
+
+
+  <section class="page" id="method" hidden>
+    <div class="grid">
+      <div class="card prose">
+        <h2>How the screen and fair value work</h2>
+        <h3>The screen</h3>
+        <p>A stock makes the list when its latest quarterly revenue is at least 20% above the same quarter a year earlier <i>and</i> it trades at least 25% below its 52-week high. The universe is the Russell 1000 plus a hand-built AI infrastructure list (power, cooling, optics, connectivity silicon, memory, semicap, neoclouds, AI software). The AI tab is the AI-tagged subset.</p>
+        <h3>Fair value: three lenses, blended</h3>
+        <p><b>Growth-adjusted earnings (45%).</b> Forward EPS × a fair P/E. For secular growers the fair P/E is 15 + 0.25 × revenue growth (capped at 120%), bounded 15–45x. Cyclicals are not rewarded for peak growth: memory and storage use 14x on forward EPS cut 45% when margins are clearly at a cycle peak; semicap equipment is capped at 28x; hardware/EMS uses 14x; power producers 20x.</p>
+        <p><b>Growth-adjusted sales (25%).</b> Only for companies without positive earnings. Fair price/sales = 2 + 0.12 × growth (capped at 100%), scaled by gross margin and current losses. Capital-intensive data-center operators get half that multiple, and CoreWeave’s roughly $35B of debt is subtracted before valuing the equity.</p>
+        <p><b>Street consensus (30%).</b> The mean analyst price target.</p>
+        <p>Weights renormalize when a lens doesn’t apply. Upside = fair value ÷ live price − 1. Signals: ≥ 40% deep discount, ≥ 15% discount, −10% to 15% near fair, below −10% premium.</p>
+        <h3>Limits</h3>
+        <p>Sales multiples use market cap on annualized latest-quarter revenue, not enterprise value; net cash or debt is ignored except where noted. One-off charges (Lumentum’s quarterly loss) are excluded from the sales lens. Fair values are a disciplined starting point for diligence, not price targets, and not investment advice.</p>
+        <h3>Data and refresh</h3>
+        <p>Live prices come from Finnhub each time the page loads and every five minutes while it is open. Fundamentals, fair values and the screen are rebuilt every weekday before the open from Robinhood financials, scanner and analyst-rating data (Nebius and Celestica revenue from their Q2 2026 releases).</p>
+      </div>
+      <div class="card">
+        <h2>Screened out</h2>
+        <p class="note">Names that looked like candidates but failed the growth or drawdown test at the last refresh.</p>
+        <div class="tablebox"><table id="rej"><thead><tr><th><button>Ticker</button></th><th><button>List</button></th><th><button>Why it failed</button></th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Research tool, not investment advice. Prices may be delayed. <span id="foot"></span></footer>
+</div>
+
+<script>
+const FINNHUB_KEY = 'd7g12c1r01qqb8rhuptgd7g12c1r01qqb8rhupu0';
+const DATA = './data/';
+
+/* ---------- formatting ---------- */
+const F = {
+  pct: (v, d = 0) => { if (v == null || !isFinite(v)) return '—'; const t = Math.abs(v * 100).toFixed(d); return (+t === 0 ? '' : v > 0 ? '+' : '−') + t + '%'; },
+  pctU: (v, d = 0) => (v == null || !isFinite(v)) ? '—' : (v < 0 ? '−' : '') + Math.abs(v * 100).toFixed(d) + '%',
+  usd: (v) => (v == null || !isFinite(v)) ? '—' : '$' + d3.format(v >= 1000 ? ',.0f' : ',.2f')(v),
+  x: (v) => (v == null || !isFinite(v)) ? '—' : v.toFixed(1) + 'x',
+  cls: (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '',
+  badge: (s) => ({ 'Deep discount': 'badge b-deep', 'Discount': 'badge b-disc', 'Near fair': 'badge b-fair', 'Premium': 'badge b-prem' })[s] || 'badge',
+};
+let C = {};
+function readTheme() { const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim(); C = { s1: v('--s1'), s2: v('--s2'), bad: v('--crit'), muted: v('--mutedbar'), grid: v('--grid'), axis: v('--axis'), ref: v('--ref'), text: v('--muted'), fg: v('--fg'), bg: v('--panel') }; }
+readTheme();
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+/* ---------- state ---------- */
+const S = { funds: [], rejects: [], meta: null, quotes: new Map(), quoteErr: 0, quoteAt: null };
+const pageState = { all: { sort: 'upside', dir: -1, q: '', sel: null }, ai: { sort: 'upside', dir: -1, q: '', sel: null } };
+
+/* ---------- data ---------- */
+async function loadFiles() {
+  const get = (f) => fetch(DATA + f, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(f); return r.json(); });
+  [S.funds, S.rejects, S.meta] = await Promise.all([get('fundamentals.json'), get('screened_out.json'), get('meta.json').catch(() => null)]);
+}
+async function loadQuotes() {
+  const syms = S.funds.map((f) => f.symbol);
+  let err = 0, i = 0;
+  const worker = async () => {
+    while (i < syms.length) {
+      const s = syms[i++];
+      try {
+        const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(s)}&token=${FINNHUB_KEY}`);
+        if (!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        if (j && j.c > 0) S.quotes.set(s, { price: j.c, prev: j.pc, t: j.t }); else err++;
+      } catch (e) { err++; }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  S.quoteErr = err; S.quoteAt = new Date();
+}
+
+/* ---------- model on live prices ---------- */
+function screen() {
+  return S.funds.map((f) => {
+    const q = S.quotes.get(f.symbol);
+    const price = q ? q.price : f.snapshot_price;
+    const upside = f.fair_value / price - 1;
+    return {
+      ...f, price, live: !!q, change_1d: q && q.prev ? price / q.prev - 1 : null,
+      drawdown: price / f.high_52w - 1, upside,
+      upside_low: f.fair_low / price - 1, upside_high: f.fair_high / price - 1,
+      fwd_pe_live: f.ntm_eps ? price / f.ntm_eps : null,
+      ps_runrate: (f.snapshot_mcap_b * price / f.snapshot_price) / f.runrate_rev_b,
+      signal: upside >= 0.4 ? 'Deep discount' : upside >= 0.15 ? 'Discount' : upside > -0.1 ? 'Near fair' : 'Premium',
+    };
+  });
+}
+const median = (a) => { const v = a.filter((x) => x != null && isFinite(x)).sort((x, y) => x - y); const n = v.length; return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
+function kpis(rows) { return { names: rows.length, g: median(rows.map((r) => r.rev_growth)), dd: median(rows.map((r) => r.drawdown)), up: median(rows.map((r) => r.upside)), deep: rows.filter((r) => r.upside >= 0.4).length }; }
+
+/* ---------- tooltip ---------- */
+function tipFor(box) { let t = box.querySelector('.tip'); if (!t) { t = el('div', 'tip'); t.hidden = true; box.appendChild(t); } return t; }
+function place(tip, box, ev) {
+  const r = box.getBoundingClientRect(); let x = ev.clientX - r.left + 12, y = ev.clientY - r.top + 12;
+  tip.hidden = false; const w = tip.offsetWidth, h = tip.offsetHeight;
+  if (x + w > r.width) x = Math.max(0, ev.clientX - r.left - w - 12);
+  if (y + h > r.height) y = Math.max(0, ev.clientY - r.top - h - 12);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function fillTip(tip, head, lines) { tip.replaceChildren(el('div', 'h', head), ...lines.map(([a, b]) => el('div', null, a + ': ' + b))); }
+
+/* ---------- list page skeleton ---------- */
+function buildListPage(id) {
+  const sec = document.getElementById(id), ai = id === 'ai';
+  const tiles = el('div', 'tiles');
+  [['names', ai ? 'AI names passing' : 'Names passing the screen', 'Revenue ≥ +20% y/y, ≥ 25% off high'], ['g', 'Median revenue growth', 'Latest quarter vs a year ago'], ['dd', 'Median drawdown', 'Live price vs 52-week high'], ['up', 'Median gap to fair value', 'Live price vs model fair value'], ['deep', 'Deep discounts', 'Fair value ≥ 40% above price']]
+    .forEach(([k, l, s]) => { const t = el('div', 'tile'); const n = el('div', 'num', '—'); n.dataset.k = k; t.append(el('div', 'lbl', l), n, el('div', 'sub', s)); tiles.appendChild(t); });
+  const grid = el('div', 'grid');
+  const c1 = el('div', 'card'); c1.append(el('h2', null, 'Fundamental value vs price' + (ai ? ' — AI' : '')), el('p', 'note', 'Upside (or downside) from the live price to model fair value. Whiskers span the most and least generous valuation lens.')); const lad = el('div', 'chart ladder'); c1.appendChild(lad);
+  const c2 = el('div', 'card'); c2.append(el('h2', null, 'Sold off despite growth' + (ai ? ' — AI' : '')), el('p', 'note', 'Revenue growth (log scale) against distance from the 52-week high. Bigger dots = larger gap to fair value. Lower-right is the pattern this screen hunts for.')); const sc = el('div', 'chart scatter'); c2.appendChild(sc);
+  grid.append(c1, c2);
+  const tc = el('div', 'card');
+  const tools = el('div', 'tools'); const inp = el('input'); inp.type = 'search'; inp.placeholder = 'Search ticker, name or theme'; inp.setAttribute('aria-label', 'Search'); const cnt = el('span', 'count'); tools.append(inp, cnt);
+  const box = el('div', 'tablebox'); const tbl = el('table'); tbl.append(el('thead'), el('tbody')); box.appendChild(tbl);
+  tc.append(el('h2', null, ai ? 'AI screen results' : 'Screen results'), el('p', 'note', 'Prices are live; fundamentals and fair values refresh every weekday before the open. Click a row for the investment notes.'), tools, box, el('div', 'detail'));
+  sec.append(tiles, grid, tc);
+  inp.addEventListener('input', () => { pageState[id].q = inp.value.toLowerCase(); render(); });
+  tbl.tBodies[0].addEventListener('click', (e) => { const tr = e.target.closest('tr[data-key]'); if (tr) { pageState[id].sel = tr.dataset.key; render(); } });
+}
+
+const COLS = [
+  { k: 'symbol', l: 'Ticker' }, { k: 'name', l: 'Company', sm: 1 }, { k: 'signal', l: 'Signal' },
+  { k: 'price', l: 'Price' }, { k: 'change_1d', l: '1D', sm: 1 }, { k: 'rev_growth', l: 'Rev growth' },
+  { k: 'drawdown', l: 'Off high' }, { k: 'fair_value', l: 'Fair value' }, { k: 'upside', l: 'Upside' },
+  { k: 'fwd_pe_live', l: 'Fwd P/E', sm: 1 }, { k: 'ps_runrate', l: 'P/S run-rate', sm: 1 }, { k: 'analyst_target', l: 'Street target', sm: 1 },
+];
+function cell(k, r) {
+  switch (k) {
+    case 'price': case 'fair_value': case 'analyst_target': return [F.usd(r[k]), ''];
+    case 'change_1d': return [F.pct(r[k], 1), F.cls(r[k])];
+    case 'rev_growth': return [F.pct(r[k]), ''];
+    case 'drawdown': return [F.pctU(r[k]), ''];
+    case 'upside': return [F.pct(r[k]), F.cls(r[k])];
+    case 'fwd_pe_live': case 'ps_runrate': return [F.x(r[k]), ''];
+    default: return [r[k] == null ? '—' : String(r[k]), ''];
+  }
+}
+
+function drawTable(id, rows) {
+  const sec = document.getElementById(id), st = pageState[id];
+  const tbl = sec.querySelector('table'), thead = tbl.tHead, tbody = tbl.tBodies[0];
+  if (!thead.rows.length) {
+    const tr = thead.insertRow();
+    COLS.forEach((c) => {
+      const th = el('th', c.sm ? 'hide-sm' : null); const b = el('button', null, c.l);
+      b.addEventListener('click', () => { if (st.sort === c.k) st.dir *= -1; else { st.sort = c.k; st.dir = ['symbol', 'name', 'signal'].includes(c.k) ? 1 : -1; } render(); });
+      th.dataset.k = c.k; th.appendChild(b); tr.appendChild(th);
+    });
+  }
+  [...thead.rows[0].cells].forEach((th) => { if (th.dataset.k === st.sort) th.setAttribute('aria-sort', st.dir > 0 ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort'); });
+  const shown = rows.filter((r) => !st.q || (r.symbol + ' ' + r.name + ' ' + r.theme).toLowerCase().includes(st.q))
+    .sort((a, b) => { const x = a[st.sort], y = b[st.sort]; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * st.dir; });
+  sec.querySelector('.count').textContent = shown.length + ' of ' + rows.length + ' names';
+  tbody.replaceChildren(...shown.map((r) => {
+    const tr = el('tr', r.symbol === st.sel ? 'sel' : null); tr.dataset.key = r.symbol;
+    COLS.forEach((c) => {
+      const td = el('td', c.sm ? 'hide-sm' : null); const [t, cl] = cell(c.k, r);
+      if (c.k === 'signal') td.appendChild(el('span', F.badge(r.signal), t));
+      else { td.textContent = t; if (cl) td.classList.add(cl); if (c.k === 'symbol') td.classList.add('sym'); }
+      tr.appendChild(td);
+    });
+    return tr;
+  }));
+  const box = sec.querySelector('.detail');
+  const sym = st.sel && rows.some((r) => r.symbol === st.sel) ? st.sel : (rows.slice().sort((a, b) => b.upside - a.upside)[0] || {}).symbol;
+  const r = rows.find((x) => x.symbol === sym); box.replaceChildren(); if (!r) return;
+  box.append(el('h3', null, r.symbol + ' · ' + r.name + ' — ' + r.theme), el('p', null, r.note));
+  if (r.model_note) box.appendChild(el('p', 'mnote', r.model_note));
+  const dl = el('dl');
+  [['Earnings lens', F.usd(r.fair_earnings)], ['Sales lens', F.usd(r.fair_sales)], ['Street mean target', F.usd(r.analyst_target)], ['Blended fair value', F.usd(r.fair_value)], ['Upside from live price', F.pct(r.upside)], ['Run-rate revenue', '$' + r.runrate_rev_b.toFixed(2) + 'B'], ['Gross margin', F.pctU(r.gross_margin)], ['Net margin (TTM)', F.pctU(r.net_margin_ttm)], ['Latest quarter', r.latest_quarter], ['Analysts Buy / Hold / Sell', r.analyst_buy + ' / ' + r.analyst_hold + ' / ' + r.analyst_sell]]
+    .forEach(([a, b]) => { const w = el('div'); w.append(el('dt', null, a), el('dd', null, b)); dl.appendChild(w); });
+  box.appendChild(dl);
+}
+
+function drawLadder(box, rows, color) {
+  box.replaceChildren(); const tip = tipFor(box);
+  const data = rows.slice().sort((a, b) => b.upside - a.upside);
+  const W = Math.max(280, box.clientWidth), rowH = 18, mt = 24, mb = 8, H = mt + mb + data.length * rowH;
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+  const probe = svg.append('text').attr('font-size', 11).text('MMMM'); const ml = probe.node().getComputedTextLength() + 10; probe.remove();
+  const lo = Math.min(-0.3, d3.min(data, (d) => Math.max(d.upside_low, -0.6))), hi = Math.max(0.5, d3.max(data, (d) => Math.min(d.upside_high, 2)));
+  const x = d3.scaleLinear([lo, hi], [ml, W - 44]).nice();
+  const y = d3.scaleBand(data.map((d) => d.symbol), [mt, H - mb]).padding(0.3);
+  x.ticks(Math.max(2, Math.floor(W / 110))).forEach((t) => {
+    svg.append('line').attr('x1', x(t)).attr('x2', x(t)).attr('y1', mt - 4).attr('y2', H - mb).attr('stroke', t === 0 ? C.axis : C.grid);
+    svg.append('text').attr('x', x(t)).attr('y', 12).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', C.text).text(F.pct(t));
+  });
+  const g = svg.append('g').selectAll('g').data(data).join('g');
+  g.append('text').attr('x', ml - 6).attr('y', (d) => y(d.symbol) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C.fg).text((d) => d.symbol);
+  g.append('line').attr('x1', (d) => x(Math.max(d.upside_low, lo))).attr('x2', (d) => x(Math.min(d.upside_high, hi))).attr('y1', (d) => y(d.symbol) + y.bandwidth() / 2).attr('y2', (d) => y(d.symbol) + y.bandwidth() / 2).attr('stroke', C.ref);
+  g.append('rect').attr('x', (d) => x(Math.min(0, Math.max(d.upside, lo)))).attr('width', (d) => Math.abs(x(Math.max(Math.min(d.upside, hi), lo)) - x(0))).attr('y', (d) => y(d.symbol)).attr('height', y.bandwidth()).attr('rx', 3)
+    .attr('fill', (d) => d.upside >= 0.15 ? color : d.upside > -0.1 ? C.muted : C.bad);
+  g.append('text').attr('x', (d) => x(Math.max(Math.min(d.upside, hi), 0)) + 4).attr('y', (d) => y(d.symbol) + y.bandwidth() / 2).attr('dy', '0.35em').attr('font-size', 10).attr('fill', C.text).text((d) => d.upside > 0 ? F.pct(d.upside) : '');
+  g.append('rect').attr('x', 0).attr('width', W).attr('y', (d) => y(d.symbol) - 2).attr('height', y.step()).attr('fill', 'transparent')
+    .on('mousemove', (ev, d) => { fillTip(tip, d.symbol + ' · ' + d.name, [['Price', F.usd(d.price)], ['Fair value', F.usd(d.fair_value) + ' (' + F.usd(d.fair_low) + '–' + F.usd(d.fair_high) + ')'], ['Upside', F.pct(d.upside)], ['Revenue growth', F.pct(d.rev_growth)]]); place(tip, box, ev); })
+    .on('mouseleave', () => { tip.hidden = true; });
+}
+
+function drawScatter(box, rows, color) {
+  box.replaceChildren(); const tip = tipFor(box);
+  const W = Math.max(280, box.clientWidth), H = 340, m = { t: 16, r: 16, b: 40, l: 48 };
+  const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+  const data = rows.filter((d) => d.rev_growth > 0);
+  const x = d3.scaleLog([0.15, Math.max(6, d3.max(data, (d) => Math.min(d.rev_growth, 30)))], [m.l, W - m.r]).clamp(true);
+  const y = d3.scaleLinear([Math.min(-0.8, d3.min(data, (d) => d.drawdown)), 0], [H - m.b, m.t]);
+  const r = d3.scaleSqrt([0, 1.5], [3, 13]).clamp(true);
+  const xt = [0.2, 0.5, 1, 2, 5, 10, 20].filter((t) => t >= x.domain()[0] && t <= x.domain()[1]);
+  xt.filter((t, i) => i === 0 || x(t) - x(xt[i - 1]) > 44).forEach((t) => {
+    svg.append('line').attr('x1', x(t)).attr('x2', x(t)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', C.grid);
+    svg.append('text').attr('x', x(t)).attr('y', H - m.b + 16).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', C.text).text('+' + d3.format(',')(t * 100) + '%');
+  });
+  y.ticks(5).forEach((t) => {
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(t)).attr('y2', y(t)).attr('stroke', C.grid);
+    svg.append('text').attr('x', m.l - 6).attr('y', y(t)).attr('dy', '0.35em').attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C.text).text(F.pctU(t));
+  });
+  svg.append('text').attr('x', W - m.r).attr('y', H - 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C.text).text('Revenue growth y/y →');
+  svg.append('text').attr('x', m.l).attr('y', m.t - 4).attr('font-size', 11).attr('fill', C.text).text('↓ further below 52-week high');
+  const dots = svg.append('g').selectAll('circle').data(data).join('circle')
+    .attr('cx', (d) => x(Math.min(d.rev_growth, x.domain()[1]))).attr('cy', (d) => y(d.drawdown)).attr('r', (d) => r(Math.max(d.upside, 0)))
+    .attr('fill', (d) => d.upside >= 0.15 ? color : d.upside > -0.1 ? C.muted : C.bad).attr('fill-opacity', 0.75)
+    .attr('stroke', 'none');
+  const placed = [];
+  data.slice().sort((a, b) => b.upside - a.upside).forEach((d) => {
+    if (placed.length >= 10) return;
+    const px = x(Math.min(d.rev_growth, x.domain()[1])) + r(Math.max(d.upside, 0)) + 3, py = y(d.drawdown);
+    if (placed.some((p) => Math.abs(p[0] - px) < 34 && Math.abs(p[1] - py) < 12) || px > W - 30) return;
+    placed.push([px, py]);
+    svg.append('text').attr('x', px).attr('y', py).attr('dy', '0.35em').attr('font-size', 10).attr('fill', C.fg).text(d.symbol);
+  });
+  dots.on('mousemove', (ev, d) => { fillTip(tip, d.symbol + ' · ' + d.theme, [['Revenue growth', F.pct(d.rev_growth)], ['Off 52-week high', F.pctU(d.drawdown)], ['Upside to fair value', F.pct(d.upside)]]); place(tip, box, ev); })
+    .on('mouseleave', () => { tip.hidden = true; });
+}
+
+function drawList(id, all) {
+  const sec = document.getElementById(id), rows = id === 'ai' ? all.filter((r) => r.ai) : all, k = kpis(rows);
+  sec.querySelectorAll('.num[data-k]').forEach((n) => { const v = k[n.dataset.k]; n.textContent = (n.dataset.k === 'names' || n.dataset.k === 'deep') ? String(v) : n.dataset.k === 'dd' ? F.pctU(v) : F.pct(v); });
+  const color = id === 'ai' ? C.s2 : C.s1;
+  if (!sec.hidden) { drawLadder(sec.querySelector('.ladder'), rows, color); drawScatter(sec.querySelector('.scatter'), rows, color); }
+  drawTable(id, rows);
+}
+
+/* ---------- header / method ---------- */
+function drawHeader(all) {
+  const a = kpis(all), ai = kpis(all.filter((r) => r.ai)), take = document.getElementById('take');
+  const b = (t) => el('b', null, t);
+  take.replaceChildren(b(String(a.deep)), ' of ' + a.names + ' high-growth names trade at least 40% below model fair value. The median name has grown revenue ', b(F.pct(a.g)), ' y/y yet sits ', b(F.pctU(Math.abs(a.dd))), ' below its 52-week high. In AI, the median gap to fair value is ', b(F.pct(ai.up)), '.');
+  const live = S.quotes.size, dot = document.getElementById('qdot');
+  dot.className = 'dot ' + (live ? 'live' : 'err');
+  document.getElementById('qstat').textContent = live ? `Live prices for ${live} of ${S.funds.length} names · ${S.quoteAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` + (S.quoteErr ? ` · ${S.quoteErr} at last-refresh price` : '') : 'Live quotes unavailable — showing prices from the last refresh';
+  const asof = S.funds[0] && S.funds[0].asof;
+  document.getElementById('fstat').textContent = 'Fundamentals as of ' + (asof || '—');
+  document.getElementById('foot').textContent = S.meta && S.meta.source ? 'Sources: ' + S.meta.source + '; live quotes from Finnhub.' : '';
+}
+function drawRejects() {
+  document.querySelector('#rej tbody').replaceChildren(...S.rejects.map((r) => { const tr = el('tr'); [r.symbol, r.list, r.reason].forEach((v, i) => { const td = el('td', i === 0 ? 'sym' : null, v); td.style.textAlign = 'left'; if (i === 2) td.style.whiteSpace = 'normal'; tr.appendChild(td); }); return tr; }));
+}
+
+function render() { if (!S.funds.length) return; readTheme(); const all = screen(); drawHeader(all); drawList('all', all); drawList('ai', all); }
+
+/* ---------- tabs & boot ---------- */
+const tabs = [...document.querySelectorAll('nav.tabs button')];
+function show(id) { tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.page === id))); document.querySelectorAll('.page').forEach((p) => { p.hidden = p.id !== id; }); history.replaceState(null, '', '#/' + id); render(); }
+tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.page)));
+buildListPage('all'); buildListPage('ai');
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+document.getElementById('refresh').addEventListener('click', async () => { document.getElementById('qstat').textContent = 'Refreshing…'; await loadQuotes(); render(); });
+
+(async () => {
+  try { await loadFiles(); drawRejects(); }
+  catch (e) { document.getElementById('take').textContent = 'Could not load the screen data files.'; return; }
+  const h = location.hash.replace(/^#\/?/, ''); if (['all', 'ai', 'method'].includes(h)) show(h); else render();
+  await loadQuotes(); render();
+  setInterval(async () => { if (document.visibilityState === 'visible') { await loadQuotes(); render(); } }, 5 * 60 * 1000);
+})();
+</script>
+</body>
+</html>
